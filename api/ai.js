@@ -13,12 +13,6 @@ export default async function handler(req, res) {
 
   key = String(key).trim().replace(/^['"]|['"]$/g, '').trim();
 
-  if (!key) {
-    return res.status(500).json({
-      error: 'CODE_API_KEY is empty on the server.'
-    });
-  }
-
   const { messages } = req.body || {};
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -28,35 +22,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const model = 'gemini-3.8-flash';
-
-    // Convert the app's chat format into Gemini Interactions steps.
-    const history = messages.map((m) => ({
-      type: m.role === 'assistant' ? 'model_output' : 'user_input',
-      content: [
-        {
-          type: 'text',
-          text: String(m.content || '')
-        }
-      ]
-    }));
-
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/interactions',
+      'https://openrouter.ai/api/v1/chat/completions',
       {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${key}`,
           'Content-Type': 'application/json',
-          'x-goog-api-key': key
+          'HTTP-Referer': 'https://codex-space-command.vercel.app',
+          'X-Title': 'CODEX SPACE COMMAND'
         },
         body: JSON.stringify({
-          model,
-          input: history,
-          store: false,
-          generation_config: {
-            thinking_level: 'medium',
-            max_output_tokens: 2048
-          }
+          model: 'openrouter/free',
+          messages: messages.map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: String(m.content || '')
+          })),
+          max_tokens: 2048
         })
       }
     );
@@ -66,21 +48,14 @@ export default async function handler(req, res) {
     if (!response.ok) {
       throw new Error(
         data?.error?.message ||
-        `Gemini HTTP ${response.status}`
+        `OpenRouter HTTP ${response.status}`
       );
     }
 
-    const text =
-      data?.output_text ||
-      data?.steps
-        ?.filter(step => step?.type === 'model_output')
-        ?.flatMap(step => step?.content || [])
-        ?.map(part => part?.text || '')
-        ?.join('') ||
-      '';
+    const text = data?.choices?.[0]?.message?.content || '';
 
     if (!text.trim()) {
-      throw new Error('Gemini returned an empty response.');
+      throw new Error('OpenRouter returned an empty response.');
     }
 
     return res.status(200).json({
@@ -88,10 +63,10 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error('Gemini API error:', err);
+    console.error('OpenRouter error:', err);
 
     return res.status(502).json({
-      error: err?.message || 'Gemini request failed.'
+      error: err?.message || 'OpenRouter request failed.'
     });
   }
 }
